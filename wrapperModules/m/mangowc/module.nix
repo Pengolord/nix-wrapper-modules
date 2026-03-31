@@ -42,6 +42,7 @@
 
     passthru.providedSessions = config.package.passthru.providedSessions;
 
+    meta.platforms = lib.platforms.linux;
     meta.maintainers = [ wlib.maintainers.pengolord ];
   };
 }
