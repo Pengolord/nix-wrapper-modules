@@ -5,7 +5,12 @@
 let
   mangowcWrapped = self.wrappers.mangowc.wrap {
     inherit pkgs;
-    settings = ''
+
+    sourcedFiles = [
+      ./config.conf
+    ];
+
+    extraContent = ''
       # menu and terminal
       bind=Alt,space,spawn,rofi -show drun
       bind=Alt,Return,spawn,${pkgs.lib.getExe pkgs.foot}

@@ -9,13 +9,49 @@
   imports = [ wlib.modules.default ];
 
   options = {
-    settings = lib.mkOption {
+    sourcedFiles = lib.mkOption {
+      type = lib.types.listOf lib.types.path;
       description = ''
-        Configuration settings for Mango (the wayland compositor).
-        Check out <https://mangowm.github.io/docs>
+        Paths to files that will be sourced at the top of the generated config file.
+      '';
+      default = [ ];
+      example = ''
+        [
+          ./config.conf
+          ./binds.conf
+          ./theme.conf
+        ]
+      '';
+    };
+
+    configFile = lib.mkOption {
+      type = wlib.types.file pkgs;
+      description = ''
+        Config file that mango will set as its config file.
+
+        Note: If configFile.path or configFile.content is set, it will overwrite the effects of the `sourcedFiles` and `extraContent` options.
+      '';
+      default.path = config.constructFiles.generatedConfig.path;
+      default.content = "";
+      example = ''
+        {
+          path = ./config.conf;
+          # or
+          content = ''''
+            # menu and terminal
+            bind=Alt,space,spawn,rofi -show drun
+            bind=Alt,Return,spawn,foot
+          '''';
+        }
+      '';
+    };
+
+    extraContent = lib.mkOption {
+      type = lib.types.lines;
+      description = ''
+        Configurations that will be appended to the end of the generated configuration file.
       '';
       default = "";
-      type = lib.types.lines;
       example = ''
         # menu and terminal
         bind=Alt,space,spawn,rofi -show drun
@@ -29,16 +65,22 @@
     # Gives an error when using a bad config.
     drv.installPhase = ''
       runHook preInstall
-      ${lib.getExe config.package} -c ${config.constructFiles.generatedConfig.path} -p
+      ${lib.getExe config.package} -c ${config.configFile.path} -p
       runHook postInstall
     '';
 
     constructFiles.generatedConfig = {
       relPath = "config.conf";
-      content = config.settings;
+      content =
+        if config.configFile.content or "" != "" then
+          config.configFile.content
+        else
+          (lib.strings.concatMapStringsSep "\n" (path: "source=${path}") config.sourcedFiles)
+          + "\n"
+          + config.extraContent;
     };
 
-    flags."-c" = config.constructFiles.generatedConfig.path;
+    flags."-c" = config.configFile.path;
 
     passthru.providedSessions = config.package.passthru.providedSessions;
 
