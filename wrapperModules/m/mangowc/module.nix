@@ -75,7 +75,13 @@
         if config.configFile.content or "" != "" then
           config.configFile.content
         else
-          (lib.strings.concatMapStringsSep "\n" (path: "source=${path}") config.sourcedFiles)
+          let
+            isImpurePath = s: builtins.isString s && !builtins.hasContext s;
+            sourcedFileToSourceExpression =
+              sourcedFile:
+              if isImpurePath sourcedFile then "source-optional=${sourcedFile}" else "source=${sourcedFile}";
+          in
+          (lib.strings.concatMapStringsSep "\n" sourcedFileToSourceExpression config.sourcedFiles)
           + "\n"
           + config.extraContent;
     };
