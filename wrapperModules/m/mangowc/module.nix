@@ -8,61 +8,194 @@
 {
   imports = [ wlib.modules.default ];
 
-  options = {
-    sourcedFiles = lib.mkOption {
-      type = lib.types.listOf wlib.types.stringable;
-      description = ''
-        Paths to files that will be sourced at the top of the generated config file.
-      '';
-      default = [ ];
-      example = ''
-        [
-          ./config.conf
-          ./binds.conf
-          ./theme.conf
-        ]
-      '';
-    };
+  options =
+    let
+      inherit (lib) mkOption types;
+    in
+    {
+      settings = mkOption {
+        type =
+          with types;
+          let
+            valueType =
+              nullOr (oneOf [
+                bool
+                int
+                float
+                str
+                path
+                (attrsOf valueType)
+                (listOf valueType)
+              ])
+              // {
+                description = "Mango configuration value";
+              };
+          in
+          valueType;
+        default = { };
+        description = ''
+          Mango configuration written in Nix. Entries with the same key
+          should be written as lists. Variables and colors names should be
+          quoted. See <https://mangowc.vercel.app/docs> for more examples.
 
-    configFile = lib.mkOption {
-      type = wlib.types.file {
-        path = lib.mkOptionDefault config.constructFiles.generatedConfig.path;
+          ::: {.note}
+          This option uses a structured format that is converted to Mango's
+          configuration syntax. Nested attributes are flattened with underscore separators.
+          For example: `animation.duration_open = 400` becomes `animation_duration_open = 400`
+
+          Keymodes (submaps) are supported via the special `keymode` attribute. Each keymode
+          is a nested attribute set under `keymode` that contains its own bindings.
+          :::
+        '';
+        example = lib.literalExpression ''
+          {
+            # Window effects
+            blur = 1;
+            blur_optimized = 1;
+            blur_params = {
+              radius = 5;
+              num_passes = 2;
+            };
+            border_radius = 6;
+            focused_opacity = 1.0;
+
+            # Animations - use underscores for multi-part keys
+            animations = 1;
+            animation_type_open = "slide";
+            animation_type_close = "slide";
+            animation_duration_open = 400;
+            animation_duration_close = 800;
+
+            # Or use nested attrs (will be flattened with underscores)
+            animation_curve = {
+              open = "0.46,1.0,0.29,1";
+              close = "0.08,0.92,0,1";
+            };
+
+            # Use lists for duplicate keys like bind and tagrule
+            bind = [
+              "SUPER,r,reload_config"
+              "Alt,space,spawn,rofi -show drun"
+              "Alt,Return,spawn,foot"
+              "ALT,R,setkeymode,resize"  # Enter resize mode
+            ];
+
+            tagrule = [
+              "id:1,layout_name:tile"
+              "id:2,layout_name:scroller"
+            ];
+
+            # Keymodes (submaps) for modal keybindings
+            keymode = {
+              resize = {
+                bind = [
+                  "NONE,Left,resizewin,-10,0"
+                  "NONE,Escape,setkeymode,default"
+                ];
+              };
+            };
+          }
+        '';
       };
-      default = { };
-      description = ''
-        Config file that mango will set as its config file.
 
-        Note: If configFile.path or configFile.content is set, it will overwrite the effects of the `sourcedFiles` and `extraContent` options.
-      '';
-      example = ''
-        {
-          path = ./config.conf;
-          # or
-          content = ''''
-            # menu and terminal
-            bind=Alt,space,spawn,rofi -show drun
-            bind=Alt,Return,spawn,foot
-          '''';
-        }
-      '';
-    };
+      extraConfig = mkOption {
+        type = types.lines;
+        default = "";
+        description = ''
+          Extra configuration lines to add to `~/.config/mango/config.conf`.
+          This is useful for advanced configurations that don't fit the structured
+          settings format, or for options that aren't yet supported by the module.
+        '';
+        example = ''
+          # Advanced config that doesn't fit structured format
+          special_option = 1
+        '';
+      };
 
-    extraContent = lib.mkOption {
-      type = lib.types.lines;
-      description = ''
-        Configurations that will be appended to the end of the generated configuration file.
-      '';
-      default = "";
-      example = ''
-        # menu and terminal
-        bind=Alt,space,spawn,rofi -show drun
-        bind=Alt,Return,spawn,foot
-      '';
+      topPrefixes = mkOption {
+        type = with lib.types; listOf str;
+        default = [ ];
+        description = ''
+          List of prefixes for attributes that should appear at the top of the config file.
+          Attributes starting with these prefixes will be sorted to the beginning.
+        '';
+        example = [ "source" ];
+      };
+
+      bottomPrefixes = mkOption {
+        type = with lib.types; listOf str;
+        default = [ ];
+        description = ''
+          List of prefixes for attributes that should appear at the bottom of the config file.
+          Attributes starting with these prefixes will be sorted to the end.
+        '';
+        example = [ "source" ];
+      };
+
+      autostart_sh = mkOption {
+        description = ''
+          Shell script to run on mango startup. No shebang needed.
+
+          When this option is set, the script will be written to
+          `~/.config/mango/autostart.sh` and an `exec-once` line
+          will be automatically added to the config to execute it.
+        '';
+        type = types.lines;
+        default = "";
+        example = ''
+          waybar &
+          dunst &
+        '';
+      };
+
+      sourcedFiles = mkOption {
+        type = types.listOf wlib.types.stringable;
+        description = ''
+          Paths to files that will be sourced at the top of the generated config file.
+        '';
+        default = [ ];
+        example = ''
+          [
+            ./config.conf
+            ./binds.conf
+            ./theme.conf
+          ]
+        '';
+      };
+
+      configFile = mkOption {
+        type = wlib.types.file {
+          path = lib.mkOptionDefault config.constructFiles.generatedConfig.path;
+        };
+        default = { };
+        description = ''
+          Config file that mango will set as its config file.
+
+          Note: If configFile.path or configFile.content is set, it will overwrite the effects of the `sourcedFiles` and `extraContent` options.
+        '';
+        example = ''
+          {
+            path = ./config.conf;
+            # or
+            content = ''''
+              # menu and terminal
+              bind=Alt,space,spawn,rofi -show drun
+              bind=Alt,Return,spawn,foot
+            '''';
+          }
+        '';
+      };
+
+      extraContent = mkOption {
+        type = types.lines;
+        description = ''
+          Deprecated, please use 'extraConfig' instead
+        '';
+        default = "";
+      };
     };
-  };
 
   config = {
-    package = lib.mkDefault pkgs.mangowc;
     # Gives an error when using a bad config.
     drv.installPhase = ''
       runHook preInstall
@@ -77,18 +210,37 @@
           config.configFile.content
         else
           let
+            settingsString =
+              let
+                inherit (import ./lib.nix lib) toMango;
+              in
+              toMango {
+                topCommandsPrefixes = config.topPrefixes;
+                bottomCommandsPrefixes = config.bottomPrefixes;
+              } config.settings;
             isImpurePath = s: builtins.isString s && !builtins.hasContext s;
             sourcedFileToSourceExpression =
               sourcedFile:
               if isImpurePath sourcedFile then "source-optional=${sourcedFile}" else "source=${sourcedFile}";
+            extraConfig =
+              if config.extraContent or "" != "" then
+                lib.warn "wrapperModules.mangowc: config.extraContent is deprecated, please use config.extraConfig instead" (
+                  config.extraContent
+                )
+              else
+                config.extraConfig;
           in
           (lib.strings.concatMapStringsSep "\n" sourcedFileToSourceExpression config.sourcedFiles)
           + "\n"
-          + config.extraContent;
+          + settingsString
+          + "\n"
+          + extraConfig
+          + "\n"
+          + lib.optionalString (config.autostart_sh != "") "\nexec-once=~/.config/mango/autostart.sh\n";
     };
 
     flags."-c" = config.configFile.path;
-
+    package = lib.mkDefault pkgs.mangowc;
     passthru.providedSessions = config.package.passthru.providedSessions;
 
     meta.platforms = lib.platforms.linux;
